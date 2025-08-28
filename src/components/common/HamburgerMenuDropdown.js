@@ -70,7 +70,7 @@ const HamburgerMenuDropdown = () => {
         { icon: <HomeIcon />, text: 'Home', path: '/user-home' },
         { icon: <SearchIcon />, text: 'Browse Properties', path: '/user-allproperties' },
         { icon: <InfoIcon />, text: 'About Us', path: '/about' },
-        { icon: <HelpIcon />, text: 'Help', path: '/help' },
+        { icon: <HelpIcon />, text: 'Help', path: '/help-support' },
         { icon: <ContactIcon />, text: 'Contact', path: '/contact' }
       );
     } else {
@@ -98,7 +98,7 @@ const HamburgerMenuDropdown = () => {
           { icon: <DashboardIcon />, text: 'Admin Dashboard', path: '/admin/home' },
           { icon: <BusinessIcon />, text: 'All Properties', path: '/admin/all-properties' },
           { icon: <ListIcon />, text: 'New Listings', path: '/admin/new-listings' },
-          { icon: <PersonIcon />, text: 'Manage Users', path: '/admin/users' },
+          { icon: <PersonIcon />, text: 'Manage Users', path: '/admin/user-management' },
           { icon: <NotificationsIcon />, text: 'Notifications', path: '/notifications' },
           { icon: <SettingsIcon />, text: 'Settings', path: '/admin/settings' },
           { icon: <PersonIcon />, text: 'Profile', path: '/profile' }
@@ -109,7 +109,7 @@ const HamburgerMenuDropdown = () => {
       menuItems.push(
         { divider: true },
         { icon: <SettingsIcon />, text: 'Settings', path: '/settings' },
-        { icon: <HelpIcon />, text: 'Help & Support', path: '/help' },
+        { icon: <HelpIcon />, text: 'Help & Support', path: '/help-support' },
         { icon: <LogoutIcon />, text: 'Logout', action: 'logout' }
       );
     }

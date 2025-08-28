@@ -19,6 +19,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { registerUser } from '../api/authApi';
 import { useTheme } from '../contexts/ThemeContext';
+import AppSnackbar from '../components/common/AppSnackbar';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -47,7 +48,11 @@ const Signup = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
 
   const [tenantForm, setTenantForm] = useState({
     username: '',
@@ -98,7 +103,6 @@ const Signup = () => {
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
     setError('');
-    setSuccess('');
   };
 
   const handleTenantChange = (field) => (event) => {
@@ -123,33 +127,25 @@ const Signup = () => {
   };
 
   const validateForm = () => {
-    let currentForm, requiredFields;
-    
-    if (activeTab === 0) {
-      currentForm = tenantForm;
-      requiredFields = ['username', 'email', 'password', 'confirmPassword', 'firstName', 'lastName'];
-    } else if (activeTab === 1) {
-      currentForm = ownerForm;
-      requiredFields = ['username', 'email', 'password', 'confirmPassword', 'firstName', 'lastName', 'businessName', 'contactPerson'];
-    } else {
-      currentForm = adminForm;
-      requiredFields = ['username', 'email', 'password', 'confirmPassword', 'firstName', 'lastName', 'department'];
-    }
-    
-    for (const field of requiredFields) {
-      if (!currentForm[field] || currentForm[field].trim() === '') {
-        setError(`Please fill in all required fields`);
-        return false;
-      }
+    const currentForm = activeTab === 0 ? tenantForm : activeTab === 1 ? ownerForm : adminForm;
+
+    if (!currentForm.username || !currentForm.email || !currentForm.password || !currentForm.confirmPassword) {
+      setError('Please fill in all required fields');
+      return false;
     }
 
-    if (currentForm.password !== currentForm.confirmPassword) {
-      setError('Passwords do not match');
+    if (currentForm.username.length < 3) {
+      setError('Username must be at least 3 characters long');
       return false;
     }
 
     if (currentForm.password.length < 6) {
       setError('Password must be at least 6 characters long');
+      return false;
+    }
+
+    if (currentForm.password !== currentForm.confirmPassword) {
+      setError('Passwords do not match');
       return false;
     }
 
@@ -163,85 +159,99 @@ const Signup = () => {
   };
 
   const handleSubmit = async (event) => {
-    event.preventDefault();
+  event.preventDefault();
+  
+  if (!validateForm()) {
+    return;
+  }
+
+  setIsLoading(true);
+  setError('');
+
+  try {
+    let currentForm, userRole, profileData;
     
-    if (!validateForm()) {
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    try {
-      let currentForm, userRole, profileData;
-      
-      if (activeTab === 0) {
-        currentForm = tenantForm;
-        userRole = 'user';
-        profileData = {
-          first_name: currentForm.firstName,
-          last_name: currentForm.lastName,
-          phone: currentForm.phone,
-          gender: currentForm.gender,
-          birthdate: currentForm.birthdate,
-          nationality: currentForm.nationality
-        };
-      } else if (activeTab === 1) {
-        currentForm = ownerForm;
-        userRole = 'propertyowner';
-        profileData = {
-          first_name: currentForm.firstName,
-          last_name: currentForm.lastName,
-          phone: currentForm.phone,
-          gender: currentForm.gender,
-          birthdate: currentForm.birthdate,
-          nationality: currentForm.nationality,
-          business_name: currentForm.businessName,
-          contact_person: currentForm.contactPerson,
-          business_type: currentForm.businessType,
-          business_registration: currentForm.businessRegistration,
-          business_address: currentForm.businessAddress
-        };
-      } else {
-        currentForm = adminForm;
-        userRole = 'admin';
-        profileData = {
-          first_name: currentForm.firstName,
-          last_name: currentForm.lastName,
-          phone: currentForm.phone,
-          gender: currentForm.gender,
-          birthdate: currentForm.birthdate,
-          nationality: currentForm.nationality,
-          department: currentForm.department,
-          admin_level: currentForm.adminLevel
-        };
-      }
-      
-      const userData = {
-        username: currentForm.username,
-        email: currentForm.email,
-        password: currentForm.password,
-        role: userRole,
-        profile: profileData
+    if (activeTab === 0) {
+      currentForm = tenantForm;
+      userRole = 'user';
+      profileData = {
+        first_name: currentForm.firstName,
+        last_name: currentForm.lastName,
+        phone: currentForm.phone,
+        gender: currentForm.gender,
+        birthdate: currentForm.birthdate,
+        nationality: currentForm.nationality
       };
+    } else if (activeTab === 1) {
+      currentForm = ownerForm;
+      userRole = 'propertyowner';
+      profileData = {
+        first_name: currentForm.firstName,
+        last_name: currentForm.lastName,
+        phone: currentForm.phone,
+        gender: currentForm.gender,
+        birthdate: currentForm.birthdate,
+        nationality: currentForm.nationality,
+        business_name: currentForm.businessName,
+        contact_person: currentForm.contactPerson,
+        business_type: currentForm.businessType,
+        business_registration: currentForm.businessRegistration,
+        business_address: currentForm.businessAddress
+      };
+    } else {
+      currentForm = adminForm;
+      userRole = 'admin';
+      profileData = {
+        first_name: currentForm.firstName,
+        last_name: currentForm.lastName,
+        phone: currentForm.phone,
+        gender: currentForm.gender,
+        birthdate: currentForm.birthdate,
+        nationality: currentForm.nationality,
+        department: currentForm.department,
+        admin_level: currentForm.adminLevel
+      };
+    }
+    
+    const userData = {
+      username: currentForm.username,
+      email: currentForm.email,
+      password: currentForm.password,
+      role: userRole,
+      profile: profileData
+    };
 
-      const response = await registerUser(userData);
+    const response = await registerUser(userData);
+    
+    if (response.success || response.message.includes('successfully')) {
+      setSnackbar({
+        open: true,
+        message: response.requiresEmailVerification 
+          ? 'Account created successfully! Please check your email and click the verification link to activate your account.'
+          : 'Account created successfully! Please check your email for verification.',
+        severity: 'success'
+      });
       
-      if (response.success) {
-        setSuccess('Account created successfully! Please check your email for verification.');
+      // If email verification is required, navigate to a verification pending page or stay on current page
+      if (response.requiresEmailVerification) {
+        setTimeout(() => {
+          navigate(`/verify-email?email=${encodeURIComponent(currentForm.email)}`);
+        }, 2000);
+      } else {
         setTimeout(() => {
           navigate('/login');
         }, 2000);
-      } else {
-        setError(response.message || 'Registration failed. Please try again.');
       }
-    } catch (error) {
-      console.error('Registration error:', error);
-      setError(error.message || 'An error occurred during registration. Please try again.');
-    } finally {
-      setIsLoading(false);
+    } else {
+      setError(response.message || 'Registration failed. Please try again.');
     }
-  };
+  } catch (error) {
+    console.error('Registration error:', error);
+    setError(error.message || 'An error occurred during registration. Please try again.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <Container 
@@ -276,12 +286,6 @@ const Signup = () => {
         {error && (
           <Alert severity="error" sx={{ m: 3 }}>
             {error}
-          </Alert>
-        )}
-
-        {success && (
-          <Alert severity="success" sx={{ m: 3 }}>
-            {success}
           </Alert>
         )}
 
@@ -320,7 +324,7 @@ const Signup = () => {
         <TabPanel value={activeTab} index={0}>
           <Box component="form" onSubmit={handleSubmit}>
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-              Personal Information
+              Account Information
             </Typography>
             
             <TextField
@@ -343,7 +347,13 @@ const Signup = () => {
               value={tenantForm.email}
               onChange={handleTenantChange('email')}
             />
-            
+
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Personal Information
+            </Typography>
+
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -367,7 +377,7 @@ const Signup = () => {
                 />
               </Grid>
             </Grid>
-            
+
             <TextField
               label="Phone Number"
               variant="outlined"
@@ -375,7 +385,7 @@ const Signup = () => {
               margin="normal"
               value={tenantForm.phone}
               onChange={handleTenantChange('phone')}
-              helperText="Optional - helps property owners contact you"
+              helperText="Optional - Contact number"
             />
 
             <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -467,7 +477,7 @@ const Signup = () => {
               {isLoading ? (
                 <CircularProgress size={24} color="inherit" />
               ) : (
-                'Create Tenant Account'
+                'Create User Account'
               )}
             </Button>
           </Box>
@@ -596,30 +606,35 @@ const Signup = () => {
               margin="normal"
               value={ownerForm.businessName}
               onChange={handleOwnerChange('businessName')}
-              helperText="Name of your property business or company"
+              helperText="Name of your property business"
             />
             
             <TextField
               label="Contact Person"
               variant="outlined"
               fullWidth
-              required
               margin="normal"
               value={ownerForm.contactPerson}
               onChange={handleOwnerChange('contactPerson')}
-              helperText="Primary contact person name"
+              helperText="Primary contact person for business"
             />
             
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Business Type"
-                  variant="outlined"
-                  fullWidth
-                  value={ownerForm.businessType}
-                  onChange={handleOwnerChange('businessType')}
-                  helperText="e.g., Real Estate"
-                />
+                <FormControl fullWidth>
+                  <InputLabel>Business Type</InputLabel>
+                  <Select
+                    value={ownerForm.businessType}
+                    label="Business Type"
+                    onChange={handleOwnerChange('businessType')}
+                  >
+                    <MenuItem value="">Select Type</MenuItem>
+                    <MenuItem value="individual">Individual</MenuItem>
+                    <MenuItem value="company">Company</MenuItem>
+                    <MenuItem value="partnership">Partnership</MenuItem>
+                    <MenuItem value="other">Other</MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
               
               <Grid item xs={12} sm={6}>
@@ -629,7 +644,7 @@ const Signup = () => {
                   fullWidth
                   value={ownerForm.businessRegistration}
                   onChange={handleOwnerChange('businessRegistration')}
-                  helperText="Registration number (optional)"
+                  helperText="Registration number"
                 />
               </Grid>
             </Grid>
@@ -638,12 +653,12 @@ const Signup = () => {
               label="Business Address"
               variant="outlined"
               fullWidth
-              margin="normal"
               multiline
-              rows={2}
+              rows={3}
+              margin="normal"
               value={ownerForm.businessAddress}
               onChange={handleOwnerChange('businessAddress')}
-              helperText="Optional - your main business address"
+              helperText="Complete business address"
             />
 
             <Divider sx={{ my: 3 }} />
@@ -763,7 +778,7 @@ const Signup = () => {
               margin="normal"
               value={adminForm.phone}
               onChange={handleAdminChange('phone')}
-              helperText="Optional - Contact number"
+              helperText="Official contact number"
             />
 
             <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -915,6 +930,13 @@ const Signup = () => {
           </Typography>
         </Box>
       </Box>
+
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+      />
     </Container>
   );
 };
