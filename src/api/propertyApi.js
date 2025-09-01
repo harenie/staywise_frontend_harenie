@@ -50,17 +50,41 @@ const validatePropertyId = (propertyId) => {
 
 const safeJsonParse = (value) => {
   if (!value) return [];
+  
+  // If already an array, return it
   if (Array.isArray(value)) return value;
+  
+  // If it's a string, try to parse as JSON first
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
+      
+      // If parsed is an object (like {"Parking": 1, "Pool": 1}), extract keys where value > 0
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        return Object.keys(parsed).filter(key => parsed[key] > 0);
+      }
+      
+      // If parsed is an array, return it
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+      
+      // If single value, wrap in array
+      return [parsed];
     } catch (error) {
+      // If JSON parsing fails, treat as comma-separated string
       return value.split(',').map(item => item.trim()).filter(item => item.length > 0);
     }
   }
+  
+  // If it's already an object, extract keys where value > 0
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return Object.keys(value).filter(key => value[key] > 0);
+  }
+  
   return [];
 };
+
 
 const processPropertyData = (property) => {
   if (!property) return property;
@@ -167,11 +191,42 @@ export const getPublicPropertyById = async (propertyId) => {
 
 export const createProperty = async (propertyData) => {
   try {
+    
+    if ((propertyData.latitude || propertyData.longitude) && 
+        (!propertyData.latitude || !propertyData.longitude)) {
+      throw new Error('Both latitude and longitude must be provided together');
+    }
+    
+    if (propertyData.latitude && propertyData.longitude) {
+      const lat = parseFloat(propertyData.latitude);
+      const lng = parseFloat(propertyData.longitude);
+      
+      if (isNaN(lat) || isNaN(lng)) {
+        throw new Error('Invalid coordinate format');
+      }
+      
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        throw new Error('Coordinates out of valid range');
+      }
+    }
+
+    const payload = {
+      ...propertyData,
+      latitude: propertyData.latitude ? parseFloat(propertyData.latitude) : null,
+      longitude: propertyData.longitude ? parseFloat(propertyData.longitude) : null
+    };
+
+    console.log('Creating property with coordinates:', {
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      address: payload.address
+    });
+
     if (!propertyData || typeof propertyData !== 'object') {
       throw new Error('Property data is required');
     }
 
-    const response = await apiClient.post('/properties', propertyData);
+    const response = await apiClient.post('/properties', payload);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -190,8 +245,32 @@ export const updateProperty = async (propertyId, updateData) => {
     if (!updateData || typeof updateData !== 'object') {
       throw new Error('Update data is required');
     }
+    
+    if ((updateData.latitude || updateData.longitude) && 
+        (!updateData.latitude || !updateData.longitude)) {
+      throw new Error('Both latitude and longitude must be provided together');
+    }
+    
+    if (updateData.latitude && updateData.longitude) {
+      const lat = parseFloat(updateData.latitude);
+      const lng = parseFloat(updateData.longitude);
+      
+      if (isNaN(lat) || isNaN(lng)) {
+        throw new Error('Invalid coordinate format');
+      }
+      
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        throw new Error('Coordinates out of valid range');
+      }
+    }
 
-    const response = await apiClient.put(`/properties/${validatedId}`, updateData);
+    const payload = {
+      ...updateData,
+      latitude: updateData.latitude ? parseFloat(updateData.latitude) : null,
+      longitude: updateData.longitude ? parseFloat(updateData.longitude) : null
+    };
+
+    const response = await apiClient.put(`/properties/${validatedId}`, payload);
     
     if (!response.data) {
       throw new Error('Invalid response from server');

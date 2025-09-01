@@ -61,13 +61,15 @@ import { submitBookingRequest } from '../../api/bookingApi';
 import { calculateBookingPricing, formatCurrency } from '../../utils/BookingCalculationUtils';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import { useTheme } from '../../contexts/ThemeContext';
+import PaymentOptionsModal from '../../components/bookings/PaymentOptionsModal';
+
 
 // Extend dayjs with required plugins
 dayjs.extend(isSameOrBefore);
 // dayjs.extend(isBefore);
 // dayjs.extend(isAfter);
 
-const steps = ['Booking Overview', 'Personal Details', 'Payment'];
+const steps = ['Booking Overview', 'Personal Details', 'Payment', 'Status'];
 
 const UserBookingPage = () => {
   const { id } = useParams();
@@ -79,6 +81,11 @@ const UserBookingPage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const [bookingApproved, setBookingApproved] = useState(false);
+const [paymentAccountInfo, setPaymentAccountInfo] = useState('');
+const [showPaymentModal, setShowPaymentModal] = useState(false);
+const [currentBookingId, setCurrentBookingId] = useState(null);
   
   const [bookingData, setBookingData] = useState({
     check_in_date: null,
@@ -187,6 +194,26 @@ const UserBookingPage = () => {
       setLoading(false);
     }
   };
+  
+  useEffect(() => {
+  const checkBookingStatus = () => {
+    // In a real app, this would be done via WebSocket or periodic API calls
+    // For now, we'll check for updates in localStorage (you can implement real-time updates)
+    const bookingStatus = localStorage.getItem(`booking_${currentBookingId}_status`);
+    const accountInfo = localStorage.getItem(`booking_${currentBookingId}_account_info`);
+    
+    if (bookingStatus === 'approved' && accountInfo && !bookingApproved) {
+      setBookingApproved(true);
+      setPaymentAccountInfo(accountInfo);
+      setShowPaymentModal(true);
+    }
+  };
+
+  if (currentBookingId) {
+    const interval = setInterval(checkBookingStatus, 5000); // Check every 5 seconds
+    return () => clearInterval(interval);
+  }
+}, [currentBookingId, bookingApproved]);
 
   const calculatePricing = () => {
     if (!property || !bookingData.check_in_date || !bookingData.check_out_date) {
@@ -274,7 +301,7 @@ const UserBookingPage = () => {
   const handleBack = () => {
     setActiveStep(prev => prev - 1);
   };
-
+  
   const handleSubmit = async () => {
     if (!validateStep(1)) return;
     
@@ -287,10 +314,12 @@ const UserBookingPage = () => {
         ...personalDetails,
         check_in_date: dayjs(bookingData.check_in_date).format('YYYY-MM-DD'),
         check_out_date: dayjs(bookingData.check_out_date).format('YYYY-MM-DD'),
-        total_amount: pricingBreakdown?.total || 0
+        total_amount: pricingBreakdown?.total || 0,
+        advance_amount: pricingBreakdown?.advanceAmount || 0
       };
 
-      await submitBookingRequest(bookingRequest);
+      const response = await submitBookingRequest(bookingRequest);
+      setCurrentBookingId(response.booking_id);       
       
       setSnackbar({
         open: true,
@@ -313,6 +342,29 @@ const UserBookingPage = () => {
       setSubmitting(false);
     }
   };
+  
+  const handlePaymentComplete = async (paymentMethod, paymentData) => {
+  try {
+    setShowPaymentModal(false);
+    
+    setSnackbar({
+      open: true,
+      message: 'Payment submitted successfully! Waiting for owner confirmation...',
+      severity: 'success'
+    });
+
+    setTimeout(() => {
+      navigate('/user-bookings'); // Navigate to user bookings page
+    }, 3000);
+    
+  } catch (error) {
+    setSnackbar({
+      open: true,
+      message: 'Payment processing failed. Please try again.',
+      severity: 'error'
+    });
+  }
+};
 
   const renderStepContent = () => {
     switch (activeStep) {
@@ -322,6 +374,8 @@ const UserBookingPage = () => {
         return renderPersonalDetails();
       case 2:
         return renderPayment();
+      case 3:
+        return renderPaymentStatus();
       default:
         return null;
     }
@@ -822,118 +876,148 @@ const UserBookingPage = () => {
 
         {/* Booking Summary for Right Side */}
         {pricingBreakdown && (
-          <Card sx={{ 
-            backgroundColor: isDark ? theme.cardBackground : '#ffffff',
-            border: isDark ? `1px solid ${theme.border}` : 'none',
-            position: 'sticky',
-            top: 20
-          }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ 
-                mb: 2, 
-                fontWeight: 600,
-                color: isDark ? theme.textPrimary : 'inherit'
-              }}>
-                Cozy Private Room for Rent Near Colombo City Center
-              </Typography>
-              
-              <Typography variant="body2" sx={{ 
-                mb: 2,
-                color: isDark ? theme.textSecondary : 'inherit'
-              }}>
-                100, Sea Street, Colombo 02
-              </Typography>
+  <Card sx={{ 
+    backgroundColor: isDark ? theme.cardBackground : '#ffffff',
+    border: isDark ? `1px solid ${theme.border}` : 'none',
+    position: 'sticky',
+    top: 20
+  }}>
+    <CardContent>
+      <Typography variant="h6" sx={{ 
+        mb: 2, 
+        fontWeight: 600,
+        color: isDark ? theme.textPrimary : 'inherit'
+      }}>
+        {property?.property_type} - {property?.unit_type}
+      </Typography>
+      
+      <Typography variant="body2" sx={{ 
+        mb: 2,
+        color: isDark ? theme.textSecondary : 'inherit'
+      }}>
+        {property?.address}
+      </Typography>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <BedIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
-                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
-                  {property?.bedrooms || 3} Bedrooms
-                </Typography>
-              </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+        <BedIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
+        <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+          {property?.bedrooms || 0} Bedrooms
+        </Typography>
+      </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <BathtubIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
-                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
-                  {property?.bathrooms || 2} Bathrooms
-                </Typography>
-              </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+        <BathtubIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
+        <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+          {property?.bathrooms || 0} Bathrooms
+        </Typography>
+      </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <HomeIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
-                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
-                  1 Parking
-                </Typography>
-              </Box>
+      {property?.parking && (
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+          <HomeIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
+          <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+            {property?.parking} Parking
+          </Typography>
+        </Box>
+      )}
 
-              <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
+      <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
 
-              <Typography variant="h6" sx={{ 
-                mb: 2, 
-                fontWeight: 600,
-                color: isDark ? theme.textPrimary : 'inherit'
-              }}>
-                Price Details
-              </Typography>
+      <Typography variant="h6" sx={{ 
+        mb: 2, 
+        fontWeight: 600,
+        color: isDark ? theme.textPrimary : 'inherit'
+      }}>
+        Price Details
+      </Typography>
 
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
-                  Rental for the first Month:
-                </Typography>
-                <Typography variant="body2" sx={{ 
-                  fontWeight: 600,
-                  color: isDark ? theme.textPrimary : 'inherit'
-                }}>
-                  Rs. {pricingBreakdown.subtotal.toLocaleString()}
-                </Typography>
-              </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+          Rental for the first Month:
+        </Typography>
+        <Typography variant="body2" sx={{ 
+          fontWeight: 600,
+          color: isDark ? theme.textPrimary : 'inherit'
+        }}>
+          Rs. {pricingBreakdown.subtotal.toLocaleString()}
+        </Typography>
+      </Box>
 
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
-                  One time service fee:
-                </Typography>
-                <Typography variant="body2" sx={{ 
-                  fontWeight: 600,
-                  color: isDark ? theme.textPrimary : 'inherit'
-                }}>
-                  Rs. {pricingBreakdown.serviceFee.toLocaleString()}
-                </Typography>
-              </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+          One time service fee:
+        </Typography>
+        <Typography variant="body2" sx={{ 
+          fontWeight: 600,
+          color: isDark ? theme.textPrimary : 'inherit'
+        }}>
+          Rs. {pricingBreakdown.serviceFee.toLocaleString()}
+        </Typography>
+      </Box>
 
-              <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+          Advance Payment ({pricingBreakdown.advancePercentage || 30}%):
+        </Typography>
+        <Typography variant="body2" sx={{ 
+          fontWeight: 600,
+          color: isDark ? theme.textPrimary : 'inherit'
+        }}>
+          Rs. {pricingBreakdown.advanceAmount.toLocaleString()}
+        </Typography>
+      </Box>
 
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="h6" sx={{ 
-                  fontWeight: 600,
-                  color: isDark ? theme.textPrimary : 'inherit'
-                }}>
-                  Sub Total
-                </Typography>
-                <Typography variant="h6" sx={{ 
-                  fontWeight: 600,
-                  color: theme.primary
-                }}>
-                  Rs. {pricingBreakdown.total.toLocaleString()}
-                </Typography>
-              </Box>
+      <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
 
-              <Alert 
-                severity="info" 
-                sx={{ 
-                  mt: 2,
-                  backgroundColor: isDark ? theme.surfaceBackground : undefined,
-                  color: isDark ? theme.textPrimary : undefined,
-                  '& .MuiAlert-icon': {
-                    color: isDark ? theme.info : undefined,
-                  }
-                }}
-              >
-                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
-                  You will be charged once the owner accepts your request
-                </Typography>
-              </Alert>
-            </CardContent>
-          </Card>
-        )}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+    <Typography variant="h7" sx={{ 
+      fontWeight: 600,
+      color: isDark ? theme.textPrimary : 'inherit'
+    }}>
+      Total Amount
+    </Typography>
+    <Typography variant="h7" sx={{ 
+      fontWeight: 600,
+      color: theme.primary
+    }}>
+      Rs. {pricingBreakdown.total.toLocaleString()}
+    </Typography>
+  </Box>
+  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+    <Typography variant="h6" sx={{ 
+      fontWeight: 600,
+      color: isDark ? theme.textPrimary : 'inherit'
+    }}>
+      Advance Amount
+    </Typography>
+    <Typography variant="h6" sx={{ 
+      fontWeight: 600,
+      color: theme.primary
+    }}>
+      Rs. {pricingBreakdown.advanceAmount.toLocaleString()}
+    </Typography>
+  </Box>
+</Box>
+
+      <Alert 
+        severity="info" 
+        sx={{ 
+          mt: 2,
+          backgroundColor: isDark ? theme.surfaceBackground : undefined,
+          color: isDark ? theme.textPrimary : undefined,
+          '& .MuiAlert-icon': {
+            color: isDark ? theme.info : undefined,
+          }
+        }}
+      >
+        <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+          You will be charged once the owner accepts your request
+        </Typography>
+      </Alert>
+    </CardContent>
+  </Card>
+)}
       </Grid>
     </Grid>
   );
@@ -1399,6 +1483,41 @@ const UserBookingPage = () => {
       </CardContent>
     </Card>
   );
+  
+  const renderPaymentStatus = () => (
+  <Card sx={{ backgroundColor: isDark ? theme.cardBackground : '#ffffff' }}>
+    <CardContent sx={{ textAlign: 'center', py: 4 }}>
+      {!bookingApproved && (
+        <>
+          <ScheduleIcon sx={{ fontSize: 60, color: 'warning.main', mb: 2 }} />
+          <Typography variant="h6" gutterBottom>
+            Waiting for Property Owner Approval
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Your booking request has been sent. You'll be notified when the owner responds.
+          </Typography>
+          <CircularProgress sx={{ mt: 2 }} />
+        </>
+      )}
+
+      {bookingApproved && (
+        <>
+          <CheckCircleIcon sx={{ fontSize: 60, color: 'success.main', mb: 2 }} />
+          <Typography variant="h6" gutterBottom>
+            Booking Approved! Choose Payment Method
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => setShowPaymentModal(true)}
+            sx={{ mt: 2 }}
+          >
+            Proceed to Payment
+          </Button>
+        </>
+      )}
+    </CardContent>
+  </Card>
+);
 
   if (loading) {
     return (
@@ -1543,6 +1662,21 @@ const UserBookingPage = () => {
         severity={snackbar.severity}
         onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
       />
+      
+      {/* Payment Options Modal */}
+{showPaymentModal && pricingBreakdown && (
+  <PaymentOptionsModal
+    open={showPaymentModal}
+    onClose={() => setShowPaymentModal(false)}
+    booking={{
+      id: currentBookingId,
+      advance_amount: pricingBreakdown.advanceAmount
+    }}
+    accountInfo={paymentAccountInfo}
+    onPaymentComplete={handlePaymentComplete}
+  />
+)}
+
     </Container>
   );
 };

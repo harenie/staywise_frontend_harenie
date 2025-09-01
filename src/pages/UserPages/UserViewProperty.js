@@ -85,6 +85,7 @@ import {
 import { isAuthenticated, getUserId } from '../../utils/auth';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import MapSearch from '../../components/specific/MapSearch';
+import { getUserRole } from '../../api/loginApi';
 
 const ImageCarousel = ({ images, propertyTitle }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -118,14 +119,15 @@ const ImageCarousel = ({ images, propertyTitle }) => {
   if (validImages.length === 0) {
     return (
       <Card sx={{ mb: 3 }}>
-        <Box sx={{ 
-          height: 400, 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          backgroundColor: theme.cardBackground,
-          color: theme.textSecondary
-        }}>
+        <Box sx={ 
+          { 
+            height: 400, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            backgroundColor: theme.cardBackground,
+            color: theme.textSecondary
+          }}>
           <Typography variant="h6">No images available</Typography>
         </Box>
       </Card>
@@ -337,15 +339,20 @@ const UserViewProperty = () => {
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reportDescription, setReportDescription] = useState('');
+
+  const [propertyBookings, setPropertyBookings] = useState([]);
+
   
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
   const isLoggedIn = isAuthenticated();
   const currentUserId = getUserId();
-  const isPropertyOwner = property && property.user_id && currentUserId && 
-    parseInt(property.user_id) === parseInt(currentUserId);
 
-    console.log({property})
+  const userRole = getUserRole();
+
+  const isPropertyOwner = userRole === 'propertyowner';
+
+  console.log({property})
   useEffect(() => {
     const fetchProperty = async () => {
       try {
@@ -435,52 +442,60 @@ const UserViewProperty = () => {
 
     if (id) {
       fetchProperty();
+      checkPropertyBookings();
     }
   }, [id, isLoggedIn]);
   
   const formatPhoneForWhatsApp = (phone) => {
-  if (!phone) return null;
-  return phone.replace(/\D/g, '');
-};
+    if (!phone) return null;
+    return phone.replace(/\D/g, '');
+  };
 
-const openWhatsApp = (phone, property) => {
-  if (!phone) return;
-  const formattedPhone = formatPhoneForWhatsApp(phone);
-  
-  // Create comprehensive property message
-  const propertyTitle = `${property?.property_type} - ${property?.unit_type}`;
-  const location = property?.address;
-  const price = `LKR ${property?.price?.toLocaleString()}`;
-  const bedrooms = property?.bedrooms > 0 ? `${property?.bedrooms} Bed` : '';
-  const bathrooms = property?.bathrooms > 0 ? `${property?.bathrooms} Bath` : '';
-  const availableFrom = property?.available_from ? `Available from ${property?.available_from}` : '';
-  
-  let message = `Hi! I'm interested in this property:\n\n`;
-  message += `🏠 ${propertyTitle}\n`;
-  message += `📍 ${location}\n`;
-  message += `💰 ${price}\n`;
-  if (bedrooms || bathrooms) {
-    message += `🛏️ ${[bedrooms, bathrooms].filter(Boolean).join(', ')}\n`;
-  }
-  if (availableFrom) {
-    message += `📅 ${availableFrom}\n`;
-  }
-  message += `\nCould you please provide more details?`;
-  
-  const encodedMessage = encodeURIComponent(message);
-  const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
-  window.open(whatsappUrl, '_blank');
-};
-
+  const openWhatsApp = (phone, property) => {
+    if (!phone) return;
+    const formattedPhone = formatPhoneForWhatsApp(phone);
+    
+    // Create comprehensive property message
+    const propertyTitle = `${property?.property_type} - ${property?.unit_type}`;
+    const location = property?.address;
+    const price = `LKR ${property?.price?.toLocaleString()}`;
+    const bedrooms = property?.bedrooms > 0 ? `${property?.bedrooms} Bed` : '';
+    const bathrooms = property?.bathrooms > 0 ? `${property?.bathrooms} Bath` : '';
+    const availableFrom = property?.available_from ? `Available from ${property?.available_from}` : '';
+    
+    let message = `Hi! I'm interested in this property:\n\n`;
+    message += `🏠 ${propertyTitle}\n`;
+    message += `📍 ${location}\n`;
+    message += `💰 ${price}\n`;
+    if (bedrooms || bathrooms) {
+      message += `🛏️ ${[bedrooms, bathrooms].filter(Boolean).join(', ')}\n`;
+    }
+    if (availableFrom) {
+      message += `📅 ${availableFrom}\n`;
+    }
+    message += `\nCould you please provide more details?`;
+    
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
+    window.open(whatsappUrl, '_blank');
+  };
 
   const parseJsonField = (field) => {
     if (!field) return null;
+    
+    // If already parsed/object, return as is
     if (typeof field === 'object') return field;
-    try {
-      return JSON.parse(field);
-    } catch {
-      return null;
+    
+    // If string, try to parse
+    if (typeof field === 'string') {
+      try {
+        return JSON.parse(field);
+      } catch {
+        return null;
+      }
     }
+    
+    return field;
   };
 
   const formatPrice = (price) => {
@@ -616,6 +631,70 @@ const openWhatsApp = (phone, property) => {
     navigate(`/user-booking/${id}`);
   };
 
+  const checkPropertyBookings = async () => {
+  try {
+    const response = await fetch(`/api/bookings/property/${id}/status`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (response.ok) {
+      const bookings = await response.json();
+      setPropertyBookings(bookings.active_bookings || []);
+    }
+  } catch (error) {
+    console.error('Error checking property bookings:', error);
+  }
+};
+
+const renderBookingButton = () => {
+  const hasActiveBooking = propertyBookings.some(booking => 
+    booking.status === 'confirmed' || booking.status === 'payment_submitted'
+  );
+  
+  if (hasActiveBooking) {
+    return (
+      <Button
+        variant="outlined"
+        fullWidth
+        disabled
+        sx={{ mt: 2 }}
+      >
+        Currently Booked
+      </Button>
+    );
+  }
+  
+  return (
+    <Button
+                variant="contained"
+                fullWidth
+                size="large"
+                onClick={handleBooking}
+                sx={{
+                  backgroundColor: theme.primary,
+                  py: 1.5,
+                  fontSize: '1.1rem',
+                  fontWeight: 600,
+                  '&:hover': {
+                    backgroundColor: theme.primaryDark
+                  }
+                }}
+              >
+                Book Now
+              </Button>
+  );
+};
+
+
+  const handleEdit = () => {
+    if (isPropertyOwner) {
+      navigate(`/update-property/${id}`);
+    }
+  };
+
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
@@ -668,59 +747,63 @@ const openWhatsApp = (phone, property) => {
             </Paper>
           )}
 
-          {amenities.length > 0 && (
-            <Paper sx={{ p: 3, mt: 3 }}>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
-                Amenities
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {(Array.isArray(amenities) ? amenities : []).map((amenity, index) => (
-                  <Chip
-                    key={index}
-                    label={amenity}
-                    variant="outlined"
-                    sx={{
-                      borderColor: theme.primary,
-                      color: theme.primary,
-                      '&:hover': {
-                        backgroundColor: theme.primary + '10'
-                      }
-                    }}
-                  />
-                ))}
-              </Box>
-            </Paper>
-          )}
+          {amenities && amenities.length > 0 && (
+  <Paper sx={{ p: 3, mt: 3 }}>
+    <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
+      Amenities
+    </Typography>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+      {amenities.map((amenity, index) => (
+        <Chip
+          key={index}
+          label={amenity}
+          variant="outlined"
+          color="primary"
+          size="small"
+          sx={{
+            backgroundColor: 'rgba(25, 118, 210, 0.04)',
+            '&:hover': {
+              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+            }
+          }}
+        />
+      ))}
+    </Box>
+  </Paper>
+)}
 
-          {facilities && Object.keys(facilities).length > 0 && (
-            <Paper sx={{ p: 3, mt: 3 }}>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
-                Facilities
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {Object.entries(facilities).map(([facility, available], index) => (
-                  available && (
-                    <Chip
-                      key={index}
-                      label={facility}
-                      variant="outlined"
-                      icon={<CheckIcon sx={{ fontSize: 16 }} />}
-                      sx={{
-                        borderColor: theme.secondary,
-                        color: theme.secondary,
-                        '& .MuiChip-icon': {
-                          color: theme.secondary
-                        },
-                        '&:hover': {
-                          backgroundColor: theme.secondary + '10'
-                        }
-                      }}
-                    />
-                  )
-                ))}
-              </Box>
-            </Paper>
-          )}
+         {facilities && Object.keys(facilities).length > 0 && (
+  <Paper sx={{ p: 3, mt: 3 }}>
+    <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
+      Facilities
+    </Typography>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+      {facilities.map((facility, index) => {
+        let count = 1; // Default count if not specified
+        if (facility === 'Bedrooms' && property.bedrooms !== undefined) {
+          count = property.bedrooms;
+        } else if (facility === 'Bathrooms' && property.bathrooms !== undefined) {
+          count = property.bathrooms;
+        }
+        return (
+          <Chip
+            key={index}
+            label={`${facility}: ${count}`}
+            variant="outlined"
+            color="secondary"
+            size="small"
+            sx={{
+              backgroundColor: 'rgba(156, 39, 176, 0.04)',
+              '&:hover': {
+                backgroundColor: 'rgba(156, 39, 176, 0.08)',
+              }
+            }}
+          />
+        );
+      })}
+    </Box>
+  </Paper>
+)}
 
           {rules.length > 0 && (
             <Paper sx={{ p: 3, mt: 3 }}>
@@ -732,12 +815,14 @@ const openWhatsApp = (phone, property) => {
                 {rules.map((rule, index) => (
                   <ListItem key={index} sx={{ py: 0.5 }}>
                     <ListItemIcon sx={{ minWidth: 36 }}>
-                      <Box sx={{ 
-                        width: 6, 
-                        height: 6, 
-                        borderRadius: '50%', 
-                        backgroundColor: theme.primary 
-                      }} />
+                      <Box sx={ 
+                        { 
+                          width: 6, 
+                          height: 6, 
+                          borderRadius: '50%', 
+                          backgroundColor: theme.primary 
+                        } 
+                      } />
                     </ListItemIcon>
                     <ListItemText primary={rule} />
                   </ListItem>
@@ -1012,29 +1097,35 @@ const openWhatsApp = (phone, property) => {
             </Box>
 
             {!isPropertyOwner && (
-              <Button
-                variant="contained"
-                fullWidth
-                size="large"
-                onClick={handleBooking}
-                sx={{
-                  backgroundColor: theme.primary,
-                  py: 1.5,
-                  fontSize: '1.1rem',
-                  fontWeight: 600,
-                  '&:hover': {
-                    backgroundColor: theme.primaryDark
-                  }
-                }}
-              >
-                Book Now
-              </Button>
-            )}
+  <>
+    {renderBookingButton()}
+  </>
+)}
 
             {isPropertyOwner && (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                This is your property listing.
-              </Alert>
+              <>
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  This is your property listing.
+                </Alert>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  onClick={handleEdit}
+                  sx={{
+                    backgroundColor: theme.secondary,
+                    mt: 2,
+                    py: 1.5,
+                    fontSize: '1.1rem',
+                    fontWeight: 600,
+                    '&:hover': {
+                      backgroundColor: theme.secondaryDark
+                    }
+                  }}
+                >
+                  Edit Property
+                </Button>
+              </>
             )}
 
             {(property.created_at || property.updated_at) && (
@@ -1054,7 +1145,7 @@ const openWhatsApp = (phone, property) => {
                 )}
               </Paper>
             )}
-           {property.owner_info && !isPropertyOwner && (
+            {!isPropertyOwner && property.owner_info && (
   <Paper elevation={2} sx={{ p: 3, mt: 3 }}>
     <Typography variant="h6" gutterBottom sx={{ color: theme.primary, fontWeight: 600 }}>
       Contact Property Owner

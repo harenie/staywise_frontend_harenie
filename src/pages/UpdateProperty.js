@@ -43,7 +43,7 @@ import ImageUpload from '../components/common/ImageUpload';
 import AppSnackbar from '../components/common/AppSnackbar';
 import MapSearch from '../components/specific/MapSearch';
 
-const propertyTypes = ['ROOMS', 'FLATS', 'HOTELS', 'VILLAS'];
+const propertyTypes = ['ROOMS', 'FLATS', 'HOTELS', 'VILLAS', 'Hostels', 'Apartments', 'Rooms', 'Flats', 'Villas'];
 
 const unitOptions = [
   { label: 'Annex', value: 'Annex' },
@@ -54,6 +54,7 @@ const unitOptions = [
   { label: 'One Bedroom', value: 'One Bedroom' },
   { label: 'Two Bedroom', value: 'Two Bedroom' },
   { label: 'Three Bedroom', value: 'Three Bedroom' },
+  { label: 'Rental unit', value: 'Rental unit' },
 ];
 
 const availableAmenities = [
@@ -61,10 +62,7 @@ const availableAmenities = [
   'Swimming Pool', 'Gym', 'Security', 'Garden', 'Balcony', 'Furnished', 'Recreation Room'
 ];
 
-const availableFacilities = [
-  'Swimming Pool', 'Recreation Room', 'Bed Linens', 'Hot Water', 'Air Conditioning', 'Kitchen',
-  'Washing Machine', 'WiFi', 'TV', 'Parking', 'Security', 'Garden', 'Bedrooms', 'Bathrooms', 'Living Area', 'Balcony'
-];
+const availableFacilities = ['Bedrooms', 'Bathrooms', 'Kitchen', 'Balcony', 'Living Area'];
 
 const schema = yup.object().shape({
   propertyType: yup.string().required('Property type is required'),
@@ -261,6 +259,7 @@ const UpdateProperty = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [selectedAmenityToAdd, setSelectedAmenityToAdd] = useState('');
   const [selectedFacilityToAdd, setSelectedFacilityToAdd] = useState('');
+  const [customAmenity, setCustomAmenity] = useState('');
 
   const [latitude, setLatitude] = useState(null);
 const [longitude, setLongitude] = useState(null);
@@ -312,8 +311,34 @@ const [longitude, setLongitude] = useState(null);
         
         if (propertyData) {
           // Parse JSON fields - handle both string and object formats
-          const amenities = propertyData.amenities || {};
-          const facilities = propertyData.facilities || {};
+          // const amenities = propertyData.amenities || {};
+          // const facilities = propertyData.facilities || {};
+
+          // Handle different data formats for facilities
+      let facilities = {};
+      if (propertyData.facilities) {
+        if (Array.isArray(propertyData.facilities)) {
+          // Convert array format to object format for editing
+          propertyData.facilities.forEach(facility => {
+            facilities[facility] = 1; // Default count
+          });
+        } else if (typeof propertyData.facilities === 'object') {
+          facilities = propertyData.facilities;
+        }
+      }
+      
+      // Handle amenities
+      let amenities = {};
+      if (propertyData.amenities) {
+        if (Array.isArray(propertyData.amenities)) {
+          propertyData.amenities.forEach(amenity => {
+            amenities[amenity] = 1;
+          });
+        } else if (typeof propertyData.amenities === 'object') {
+          amenities = propertyData.amenities;
+        }
+      }
+      
           const rules = Array.isArray(propertyData.rules) ? propertyData.rules : 
                        (propertyData.rules ? [propertyData.rules] : []);
           const roommates = Array.isArray(propertyData.roommates) ? propertyData.roommates : [];
@@ -360,21 +385,45 @@ const [longitude, setLongitude] = useState(null);
   }, [id, reset]);
   
   const handleLocationSelect = (lat, lng, formattedAddress) => {
+  console.log('Location updated:', { lat, lng, formattedAddress });
+  
+  // Validate coordinates
+  if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+    console.error('Invalid coordinates received');
+    return;
+  }
+  
+  // Validate coordinate ranges
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    console.error('Coordinates out of valid range');
+    return;
+  }
+  
   setLatitude(lat);
   setLongitude(lng);
-  setValue('address', formattedAddress);
+  
+  if (formattedAddress) {
+    setValue('address', formattedAddress);
+  }
 };
 
   const onSubmit = async (data) => {
     try {
       setLoading(true);
       
+      if (editingSection === 'location' && (!latitude || !longitude)) {
+      setSnackbarMessage('Please select a valid location on the map');
+      setSnackbarOpen(true);
+      setLoading(false);
+      return;
+    }
+      
       const updateData = {
         property_type: data.propertyType,
         unit_type: data.unitType,
         address: data.address,
-        latitude: latitude,
-        longitude: longitude,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
         description: data.description,
         price: parseFloat(data.price),
         amenities: data.amenities,
@@ -442,6 +491,21 @@ const [longitude, setLongitude] = useState(null);
     }
   };
 
+  const addAmenitySimple = (amenity) => {
+  if (amenity && !amenitiesValue[amenity]) {
+    const currentAmenities = { ...amenitiesValue };
+    currentAmenities[amenity] = 1;
+    setValue('amenities', currentAmenities);
+  }
+};
+
+const addCustomAmenitySimple = () => {
+  if (customAmenity.trim() && !amenitiesValue[customAmenity.trim()]) {
+    addAmenitySimple(customAmenity.trim());
+    setCustomAmenity('');
+  }
+};
+
   const updateFacilityCount = (facility, increment) => {
     const currentValue = facilitiesValue[facility] || 0;
     const newValue = increment ? currentValue + 1 : Math.max(0, currentValue - 1);
@@ -501,60 +565,60 @@ const [longitude, setLongitude] = useState(null);
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <EditableSection
-            title="Basic Information"
-            isEditing={editingSection === 'basic'}
-            onEdit={() => setEditingSection('basic')}
-            onSave={() => setEditingSection('')}
-            onCancel={handleCancelEdit}
-            error={errors.propertyType?.message || errors.unitType?.message}
-          >
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth disabled={editingSection !== 'basic'}>
-                  <InputLabel>Property Type</InputLabel>
-                  <Select
-                    value={watch('propertyType')}
-                    onChange={(e) => setValue('propertyType', e.target.value)}
-                    error={!!errors.propertyType}
-                  >
-                    {propertyTypes.map((type) => (
-                      <MenuItem key={type} value={type}>
-                        {type}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth disabled={editingSection !== 'basic'}>
-                  <InputLabel>Unit Type</InputLabel>
-                  <Select
-                    value={watch('unitType')}
-                    onChange={(e) => setValue('unitType', e.target.value)}
-                    error={!!errors.unitType}
-                  >
-                    {unitOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label={<RequiredFieldLabel required>Monthly Rent (LKR)</RequiredFieldLabel>}
-                  type="number"
-                  variant="outlined"
-                  disabled={editingSection !== 'basic'}
-                  {...register('price')}
-                  error={!!errors.price}
-                  helperText={errors.price?.message}
-                />
-              </Grid>
-            </Grid>
-          </EditableSection>
+  title="Basic Information"
+  isEditing={editingSection === 'basic'}
+  onEdit={() => setEditingSection('basic')}
+  onSave={() => setEditingSection('')}
+  onCancel={handleCancelEdit}
+  error={errors.propertyType?.message || errors.unitType?.message}
+>
+  <Grid container spacing={3}>
+    <Grid item xs={12} sm={6}>
+      <FormControl fullWidth disabled={editingSection !== 'basic'}>
+        <InputLabel>Property Type</InputLabel>
+        <Select
+          value={watch('propertyType') || ''} // Ensure value is set even if undefined
+          onChange={(e) => setValue('propertyType', e.target.value)}
+          error={!!errors.propertyType}
+        >
+          {propertyTypes.map((type) => (
+            <MenuItem key={type} value={type}>
+              {type}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    </Grid>
+    <Grid item xs={12} sm={6}>
+      <FormControl fullWidth disabled={editingSection !== 'basic'}>
+        <InputLabel>Unit Type</InputLabel>
+        <Select
+          value={watch('unitType') || ''} // Ensure value is set even if undefined
+          onChange={(e) => setValue('unitType', e.target.value)}
+          error={!!errors.unitType}
+        >
+          {unitOptions.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    </Grid>
+    <Grid item xs={12}>
+      <TextField
+        fullWidth
+        label={<RequiredFieldLabel required>Monthly Rent (LKR)</RequiredFieldLabel>}
+        type="number"
+        variant="outlined"
+        disabled={editingSection !== 'basic'}
+        {...register('price')}
+        error={!!errors.price}
+        helperText={errors.price?.message}
+      />
+    </Grid>
+  </Grid>
+</EditableSection>
 
           <EditableSection
             title="Location & Description"
@@ -630,7 +694,14 @@ const [longitude, setLongitude] = useState(null);
         {latitude && longitude && (
           <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(76, 175, 80, 0.1)', borderRadius: 1 }}>
             <Typography variant="body2" color="success.main">
-              📍 Current location: {latitude.toFixed(6)}, {longitude.toFixed(6)}
+              Current location: {latitude.toFixed(6)}, {longitude.toFixed(6)}
+            </Typography>
+          </Box>
+        )}
+        {(!latitude || !longitude) && (
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(255, 152, 0, 0.1)', borderRadius: 1 }}>
+            <Typography variant="body2" color="warning.main">
+              Please select a location on the map to save coordinates
             </Typography>
           </Box>
         )}
@@ -670,50 +741,92 @@ const [longitude, setLongitude] = useState(null);
 </EditableSection>
 
           <EditableSection
-            title="Property Amenities"
-            isEditing={editingSection === 'amenities'}
-            onEdit={() => setEditingSection('amenities')}
-            onSave={() => setEditingSection('')}
-            onCancel={handleCancelEdit}
-            error={errors.amenities?.message}
-          >
-            {Object.keys(amenitiesValue).length > 0 && (
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                {Object.entries(amenitiesValue).map(([amenity, quantity]) => (
-                  <Grid item xs={12} sm={6} md={4} key={amenity}>
-                    <AmenityQuantitySelector
-                      amenity={amenity}
-                      quantity={quantity}
-                      onQuantityChange={(newQuantity) => updateAmenityQuantity(amenity, newQuantity)}
-                      onRemove={() => removeAmenity(amenity)}
-                      disabled={editingSection !== 'amenities'}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            )}
+  title="Property Amenities"
+  isEditing={editingSection === 'amenities'}
+  onEdit={() => setEditingSection('amenities')}
+  onSave={() => setEditingSection('')}
+  onCancel={handleCancelEdit}
+  error={errors.amenities?.message}
+>
+  {Object.keys(amenitiesValue).length > 0 && (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="body1" sx={{ mb: 2 }}>
+        Selected Amenities:
+      </Typography>
+      <Grid container spacing={1}>
+        {Object.keys(amenitiesValue).map((amenity) => (
+          <Grid item key={amenity}>
+            <Chip
+              label={amenity}
+              variant="filled"
+              color="primary"
+              onClick={() => editingSection === 'amenities' ? removeAmenity(amenity) : null}
+              onDelete={editingSection === 'amenities' ? () => removeAmenity(amenity) : undefined}
+              sx={{ 
+                m: 0.5, 
+                cursor: editingSection === 'amenities' ? 'pointer' : 'default',
+                backgroundColor: theme.primary,
+                color: 'white'
+              }}
+            />
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
+  )}
 
-            {editingSection === 'amenities' && (
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
-                <FormControl sx={{ minWidth: 200 }}>
-                  <InputLabel>Add Amenity</InputLabel>
-                  <Select
-                    value={selectedAmenityToAdd}
-                    onChange={(e) => setSelectedAmenityToAdd(e.target.value)}
-                  >
-                    {availableAmenities.filter(amenity => !amenitiesValue[amenity]).map(amenity => (
-                      <MenuItem key={amenity} value={amenity}>
-                        {amenity}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Button variant="contained" onClick={addAmenity} disabled={!selectedAmenityToAdd}>
-                  Add
-                </Button>
-              </Box>
-            )}
-          </EditableSection>
+  {editingSection === 'amenities' && (
+    <>
+      <Typography variant="body1" sx={{ mb: 2 }}>
+        Available Amenities:
+      </Typography>
+      <Grid container spacing={1} sx={{ mb: 3 }}>
+        {availableAmenities
+          .filter(amenity => !amenitiesValue[amenity])
+          .map((amenity) => (
+            <Grid item key={amenity}>
+              <Chip
+                label={amenity}
+                variant="outlined"
+                onClick={() => addAmenitySimple(amenity)}
+                sx={{ 
+                  m: 0.5, 
+                  cursor: 'pointer',
+                  '&:hover': {
+                    backgroundColor: `${theme.primary}20`
+                  }
+                }}
+              />
+            </Grid>
+          ))}
+      </Grid>
+      
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <TextField
+          value={customAmenity}
+          onChange={(e) => setCustomAmenity(e.target.value)}
+          placeholder="Add custom amenity"
+          size="small"
+          sx={{ flexGrow: 1 }}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addCustomAmenitySimple();
+            }
+          }}
+        />
+        <Button
+          variant="outlined"
+          startIcon={<AddIcon />}
+          onClick={addCustomAmenitySimple}
+          disabled={!customAmenity.trim()}
+        >
+          Add Custom
+        </Button>
+      </Box>
+    </>
+  )}
+</EditableSection>
 
           <EditableSection
             title="Property Facilities"
@@ -1106,3 +1219,4 @@ const [longitude, setLongitude] = useState(null);
 };
 
 export default UpdateProperty;
+

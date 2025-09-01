@@ -23,6 +23,9 @@ import UserPropertyViewPage from './pages/UserPages/UserViewProperty';
 import UserBookingPage from "./pages/UserPages/UserBookingPage";
 import UserFavouriteProperties from './pages/UserPages/UserFavouriteProperties';
 import UserNotifications from './pages/UserPages/UserNotifications';
+import MyBookingsPage from './pages/UserPages/MyBookingsPage';
+import PaymentPage from './pages/UserPages/PaymentPage';
+
 
 import AdminHome from './pages/AdminPages/AdminHome';
 import AdminNewListings from './pages/AdminPages/AdminNewListing';
@@ -35,6 +38,7 @@ import ProfilePage from './pages/ProfilePage';
 import EmailVerification from './pages/EmailVerification';
 import HelpSupport from './pages/HelpSupport';
 import SettingsPage from './components/settings/SettingsPage';
+import AboutUsPage from './pages/AboutUsPage';
 
 
 const PrivateRoute = ({ element }) => {
@@ -81,6 +85,8 @@ const AppRoutes = () => {
         <Route path="/verify-email" element={<EmailVerification />} />
         
         <Route path="/help-support" element={<HelpSupport />} />
+
+        <Route path="/about-us" element={<AboutUsPage />} />
         
         <Route 
   path="/settings" 
@@ -130,6 +136,25 @@ const AppRoutes = () => {
             />
           } 
         />
+        <Route 
+          path="/user-bookings" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['user']} 
+              element={<MyBookingsPage />} 
+            />
+          } 
+        />
+
+        <Route 
+  path="/payment/:bookingId" 
+  element={
+    <RoleProtectedRoute 
+      allowedRoles={['user']} 
+      element={<PaymentPage />} 
+    />
+  } 
+/>
         
         <Route 
           path="/home" 
