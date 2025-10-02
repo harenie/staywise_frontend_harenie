@@ -101,7 +101,6 @@ const ImageUpload = ({ onUpload, maxFiles = 10, maxFileSize = 5 * 1024 * 1024 })
           }));
           throw error;
         }
-
       });
 
       const results = await Promise.allSettled(uploadPromises);
