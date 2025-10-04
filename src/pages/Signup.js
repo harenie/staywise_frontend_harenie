@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
 import {
-  Container,
-  Typography,
-  TextField,
-  Button,
-  Box,
-  Tabs,
-  Tab,
   Alert,
+  Box,
+  Button,
   CircularProgress,
+  Container,
+  Divider,
   FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Grid,
-  Divider
+  InputLabel,
+  MenuItem,
+  Select,
+  Tab,
+  Tabs,
+  TextField,
+  Typography
 } from '@mui/material';
 import { CheckBoxOutlineBlank, ErrorOutline } from '@mui/icons-material';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -38,12 +38,35 @@ function TabPanel({ children, value, index, ...other }) {
   );
 }
 
+// const today = new Date();
+// const minAgeDate = new Date(
+//   today.getFullYear() - 18,  //  18 years
+//   today.getMonth(),
+//   today.getDate()
+// );
+// const formattedMaxDate = minAgeDate.toISOString().split("T")[0]; // YYYY-MM-DD
+
+// Inside Signup.js, above the component
+
+const today = new Date();
+
+// Minimum age: 16 years old
+const maxAgeDate = new Date(today.getFullYear() - 16, today.getMonth(), today.getDate());
+
+// Maximum age: 100 years old
+const minAgeDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+
+const formattedMaxDate = maxAgeDate.toISOString().split("T")[0]; // for youngest allowed
+const formattedMinDate = minAgeDate.toISOString().split("T")[0]; // for oldest allowed
+
+
 function a11yProps(index) {
   return {
     id: `simple-tab-${index}`,
     'aria-controls': `simple-tabpanel-${index}`,
   };
 }
+
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -211,20 +234,36 @@ const validateEmployeeIdField = async (employeeId) => {
       setError('Please enter a valid email address');
       return false;
     }
+    const phoneRegex = /^\+?[0-9]{7,15}$/; // Simple phone number regex
+    if (currentForm.phone && !phoneRegex.test(currentForm.phone)) {
+      setError('Please enter a valid phone number');
+      return false;
+    }
+    if (currentForm.birthdate) {
+      const birthDate = new Date(currentForm.birthdate);
+      const ageDifMs = Date.now() - birthDate.getTime();
+      const ageDate = new Date(ageDifMs); // miliseconds from epoch
+      const age = Math.abs(ageDate.getUTCFullYear() - 1970);      
+      if (age < 16) {
+        setError('You must be at least 16 years old to register');
+        return false;
+      }
+      if (age > 100) {
+        setError('Please enter a valid birth date');
+        return false;
+      }
+    } else {
+      setError('Please enter your birth date');
+      return false;
+    }
 
-    // const phoneRegex = /^\+?[0-9]{7,15}$/;
-    // if (currentForm.phone && !phoneRegex.test(currentForm.phone)) {
-    //   setError('Please enter a valid phone number');
-    //   return false;
-    // } 
+   const nicRegex = /^(?:\d{9}[VXvx]|\d{12})$/;
+   const passportRegex = /^[A-Z][0-9]{7}$/;
 
-    // const nicenRegex = /^[0-9VvXx]{10,12}$/;
-    // const passportRegex = /^[A-Za-z0-9]{5,20}$/;    
-    // if (!nicenRegex.test(currentForm.identificationNumber) && !passportRegex.test(currentForm.identificationNumber)) {
-    //   setError('Please enter a valid NIC or Passport number');
-    //   return false;
-    // }
-
+    if (!(nicRegex.test(currentForm.identificationNumber) || passportRegex.test(currentForm.identificationNumber))) {
+     setError('Please enter a valid Sri Lanka NIC or Passport number');
+     return false;
+} 
     return true;
   };
 
@@ -327,7 +366,7 @@ const validateEmployeeIdField = async (employeeId) => {
       maxWidth="sm" 
       sx={{ 
         minHeight: '100vh', 
-        display: 'flex',   
+        display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'center',
         py: 4
@@ -373,7 +412,7 @@ const validateEmployeeIdField = async (employeeId) => {
             }}
           >
             <Tab 
-              label="User/Tenant" 
+              label="Tenant" 
               {...a11yProps(0)}
               sx={{ flex: 1 }}
             />
@@ -451,10 +490,11 @@ const validateEmployeeIdField = async (employeeId) => {
               label="Phone Number"
               variant="outlined"
               fullWidth
+              required 
               margin="normal"
               value={tenantForm.phone}
               onChange={handleTenantChange('phone')}
-              helperText="Optional - Contact number"
+              //helperText="Optional - Contact number"
             />
 
             <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -470,22 +510,29 @@ const validateEmployeeIdField = async (employeeId) => {
                     <MenuItem value="male">Male</MenuItem>
                     <MenuItem value="female">Female</MenuItem>
                     <MenuItem value="other">Other</MenuItem>
-                    <MenuItem value="prefer_not_to_say">Prefer not to say</MenuItem>
+
                   </Select>
                 </FormControl>
               </Grid>
               
               <Grid item xs={12} sm={6}>
-                <TextField
+               <TextField
                   label="Birth Date"
                   type="date"
                   fullWidth
+                  required
                   value={tenantForm.birthdate}
                   onChange={handleTenantChange('birthdate')}
                   InputLabelProps={{
                     shrink: true,
                   }}
+                  inputProps={{
+                    min: formattedMinDate, // oldest allowed birthdate (e.g., 100 years ago)
+                    max: formattedMaxDate, // youngest allowed birthdate (16 years ago)
+                  }}
+                  helperText="You must be at least 16 years old"
                 />
+
               </Grid>
             </Grid>
 
@@ -493,6 +540,7 @@ const validateEmployeeIdField = async (employeeId) => {
               label="Nationality"
               variant="outlined"
               fullWidth
+              required 
               margin="normal"
               value={tenantForm.nationality}
               onChange={handleTenantChange('nationality')}
@@ -624,10 +672,11 @@ const validateEmployeeIdField = async (employeeId) => {
               label="Phone Number"
               variant="outlined"
               fullWidth
+              required
               margin="normal"
               value={ownerForm.phone}
               onChange={handleOwnerChange('phone')}
-              helperText="Optional - Business contact number"
+             // helperText="Optional - Business contact number"
             />
 
             <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -649,16 +698,23 @@ const validateEmployeeIdField = async (employeeId) => {
               </Grid>
               
               <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Birth Date"
-                  type="date"
-                  fullWidth
-                  value={ownerForm.birthdate}
-                  onChange={handleOwnerChange('birthdate')}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                />
+                    <TextField
+                      label="Birth Date"
+                      type="date"
+                      fullWidth
+                      required
+                      value={tenantForm.birthdate}
+                      onChange={handleTenantChange('birthdate')}
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                      inputProps={{
+                        min: formattedMinDate, // oldest allowed birthdate (e.g., 100 years ago)
+                        max: formattedMaxDate, // youngest allowed birthdate (16 years ago)
+                      }}
+                      helperText="You must be at least 16 years old"
+                    />
+
               </Grid>
             </Grid>
 
@@ -666,6 +722,7 @@ const validateEmployeeIdField = async (employeeId) => {
               label="Nationality"
               variant="outlined"
               fullWidth
+              required
               margin="normal"
               value={ownerForm.nationality}
               onChange={handleOwnerChange('nationality')}
@@ -884,10 +941,11 @@ const validateEmployeeIdField = async (employeeId) => {
               label="Phone Number"
               variant="outlined"
               fullWidth
+              required
               margin="normal"
               value={adminForm.phone}
               onChange={handleAdminChange('phone')}
-              helperText="Official contact number"
+             // helperText="Official contact number"
             />
 
             <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -909,16 +967,22 @@ const validateEmployeeIdField = async (employeeId) => {
               </Grid>
               
               <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Birth Date"
-                  type="date"
-                  fullWidth
-                  value={adminForm.birthdate}
-                  onChange={handleAdminChange('birthdate')}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                />
+                 <TextField
+              label="Birth Date"
+              type="date"
+              fullWidth
+              required
+              value={tenantForm.birthdate}
+              onChange={handleTenantChange('birthdate')}
+              InputLabelProps={{
+                shrink: true,
+              }}
+              inputProps={{
+                max: formattedMaxDate,  // enforce 16+ years
+              }}
+              //helperText="You must be at least 16 years old"
+            />
+
               </Grid>
             </Grid>
 
@@ -926,6 +990,7 @@ const validateEmployeeIdField = async (employeeId) => {
               label="Nationality"
               variant="outlined"
               fullWidth
+              required
               margin="normal"
               value={adminForm.nationality}
               onChange={handleAdminChange('nationality')}
@@ -968,10 +1033,10 @@ const validateEmployeeIdField = async (employeeId) => {
                 onChange={handleAdminChange('adminLevel')}
               >
                 <MenuItem value="">Select Level</MenuItem>
-                <MenuItem value="junior">Junior</MenuItem>
-                <MenuItem value="senior">Senior</MenuItem>
+                <MenuItem value="staff">Staff</MenuItem>
+                <MenuItem value="supervisor">Supervisor</MenuItem>
                 <MenuItem value="manager">Manager</MenuItem>
-                <MenuItem value="director">Director</MenuItem>
+                
               </Select>
             </FormControl>
 
